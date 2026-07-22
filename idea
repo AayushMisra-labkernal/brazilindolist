@@ -1,0 +1,351 @@
+Olist E-Commerce Data Engineering & Analytics Platform
+An end-to-end Snowflake data engineering project that transforms raw Brazilian e-commerce data into a structured analytical data warehouse with layered architecture, dimensional modeling, and business-ready analytics views.
+
+Snowflake SQL Data Engineering Star Schema
+
+Project Overview
+This project implements a complete data engineering pipeline on Snowflake using the Brazilian Olist E-Commerce dataset. It demonstrates how fragmented transactional data spread across 9 CSV files can be ingested, cleaned, modeled, and transformed into a structured analytical system.
+
+Raw Olist CSV Files (9 datasets)
+        ↓
+  Snowflake Load (via Snowsight)
+        ↓
+  RAW Layer (as-is source data)
+        ↓
+  STAGING Layer (cleaned + standardized)
+        ↓
+  CORE Layer (Star Schema - Facts + Dimensions)
+        ↓
+  ANALYTICS Layer (Business-ready views)
+        ↓
+  Power BI / Reporting
+The pipeline processes 5,732 records across 9 source tables into a dimensional model with 1 fact table, 4 dimension tables, and 6 analytical views.
+
+Project Objectives
+Build a multi-layer Snowflake data warehouse (RAW → STAGING → CORE → ANALYTICS)
+Ingest and validate 9 related e-commerce datasets
+Clean and standardize raw data with computed business metrics
+Design and implement a Star Schema for analytical workloads
+Create business-ready views for revenue, delivery, seller, and customer analysis
+Apply Snowflake best practices: warehouse sizing, auto-suspend, IF NOT EXISTS safety
+Leverage Time Travel for data recovery and protection
+Business Problem
+Raw e-commerce data is distributed across multiple disconnected datasets — customers, orders, payments, products, sellers, and reviews live in separate files with no unified view. This makes answering basic business questions difficult:
+
+What is the total revenue and how does it trend monthly?
+Which product categories generate the most revenue?
+Which sellers perform best by revenue and customer satisfaction?
+How long do deliveries take, and how often are they late?
+What payment methods do customers prefer?
+How does review score correlate with delivery performance?
+This project transforms fragmented source data into a single analytical system where all these questions can be answered with simple SQL queries against pre-built views.
+
+Architecture
+┌─────────────────────────────────────────────────────────────┐
+│                    SNOWFLAKE ENVIRONMENT                      │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐  │
+│  │   RAW Layer  │───▶│STAGING Layer │───▶│  CORE Layer  │  │
+│  │  (9 tables)  │    │  (7 tables)  │    │ (5 tables)   │  │
+│  │  As-is data  │    │  Cleaned +   │    │ Star Schema  │  │
+│  │  from source │    │  Standardized│    │ Fact + Dims  │  │
+│  └──────────────┘    └──────────────┘    └──────┬───────┘  │
+│                                                  │          │
+│                                          ┌───────▼───────┐  │
+│                                          │ANALYTICS Layer│  │
+│                                          │  (6 views)    │  │
+│                                          │ Business-ready│  │
+│                                          └───────────────┘  │
+│                                                              │
+├─────────────────────────────────────────────────────────────┤
+│  Warehouse: OLIST_WH (X-Small, Auto-Suspend 60s)           │
+│  Database:  OLIST_ECOMMERCE                                  │
+└─────────────────────────────────────────────────────────────┘
+Layer Responsibilities
+Layer	Schema	Purpose
+RAW	OLIST_ECOMMERCE.RAW	Stores ingested source data with no transformation. Exact copy of CSV files.
+STAGING	OLIST_ECOMMERCE.STAGING	Cleans, standardizes, and enriches data. Adds computed columns like delivery days, total item value, English category names.
+CORE	OLIST_ECOMMERCE.CORE	Dimensional model (Star Schema). Fact table at order-item grain with surrogate keys linking to dimension tables.
+ANALYTICS	OLIST_ECOMMERCE.ANALYTICS	Pre-aggregated business views. Ready for dashboards and reporting with no additional joins required.
+Technology Stack
+Technology	Purpose
+Snowflake	Cloud data warehouse — compute, storage, ingestion, and processing
+SQL	Data ingestion, transformation, modeling, validation, and analytics
+Snowsight	Data loading via UI, query execution, and worksheet management
+Power BI	Business intelligence and interactive visualization
+Dataset
+The project uses the Brazilian Olist E-Commerce Public Dataset, which contains real (anonymized) order data from the Olist marketplace between 2016–2018.
+
+Source Tables
+Dataset	Records	Description
+RAW_CUSTOMERS	500	Customer profiles with city, state, and zip code
+RAW_ORDERS	989	Order headers with status and delivery timestamps
+RAW_ORDER_ITEMS	1,013	Line items with product, seller, price, and freight
+RAW_ORDER_PAYMENTS	989	Payment details — type, installments, value
+RAW_ORDER_REVIEWS	926	Customer review scores and comments
+RAW_PRODUCTS	300	Product attributes — category, weight, dimensions
+RAW_SELLERS	150	Seller profiles with location
+RAW_GEOLOCATION	800	Zip code coordinates (lat/lng)
+RAW_CATEGORY_TRANSLATION	65	Portuguese to English category name mapping
+Entity Relationships
+CUSTOMERS ←── ORDERS ──→ ORDER_ITEMS ──→ PRODUCTS
+                │              │
+                ▼              ▼
+          ORDER_PAYMENTS    SELLERS
+                │
+                ▼
+          ORDER_REVIEWS
+Snowflake Environment
+Warehouse Configuration
+CREATE WAREHOUSE IF NOT EXISTS OLIST_WH
+WITH
+    WAREHOUSE_SIZE = 'XSMALL'
+    AUTO_SUSPEND = 60
+    AUTO_RESUME = TRUE
+    INITIALLY_SUSPENDED = TRUE;
+Setting	Value	Rationale
+Size	X-Small	Sufficient for this dataset size; minimizes credit consumption
+Auto-Suspend	60 seconds	Avoids idle compute charges
+Auto-Resume	TRUE	Warehouse starts automatically when queries arrive
+Initially Suspended	TRUE	No cost until first query
+Database & Schema Design
+OLIST_ECOMMERCE
+├── RAW          -- Source data (protected with IF NOT EXISTS)
+├── STAGING      -- Cleaned and enriched
+├── CORE         -- Star Schema
+└── ANALYTICS    -- Business views
+Data Ingestion
+Method
+Data was loaded using Snowsight's Load Data wizard, which internally uses Snowflake's COPY INTO command with an auto-managed stage.
+
+File Format
+CREATE OR REPLACE FILE FORMAT CSV_FORMAT
+    TYPE = CSV
+    SKIP_HEADER = 1
+    FIELD_OPTIONALLY_ENCLOSED_BY = '"'
+    NULL_IF = ('', 'NULL', 'null')
+    EMPTY_FIELD_AS_NULL = TRUE;
+Load Validation
+After loading, row counts were verified against expected values to confirm complete ingestion:
+
+SELECT 'RAW_CUSTOMERS' AS table_name, COUNT(*) AS row_count FROM RAW_CUSTOMERS
+UNION ALL SELECT 'RAW_ORDERS', COUNT(*) FROM RAW_ORDERS
+-- ... (all 9 tables verified)
+Data Protection
+RAW tables use CREATE TABLE IF NOT EXISTS to prevent accidental data loss when re-running the setup script. This protects loaded data from being overwritten.
+
+Data Transformations
+STAGING Layer
+The STAGING layer applies the following transformations:
+
+Transformation	Example
+City name standardization	INITCAP(TRIM(customer_city))
+State code normalization	UPPER(TRIM(customer_state))
+Status standardization	LOWER(TRIM(order_status))
+Delivery days calculation	DATEDIFF('day', purchase, delivery)
+Total item value	price + freight_value
+Product volume	length * height * width
+English category names	JOIN with translation table
+Review response time	DATEDIFF('day', creation, answer)
+NULL filtering	WHERE order_id IS NOT NULL
+CORE Layer — Star Schema
+The CORE layer implements a Star Schema optimized for analytical queries.
+
+Data Model
+Star Schema Design
+erDiagram
+    FACT_ORDER_ITEMS }o--|| DIM_CUSTOMERS : "customer_key"
+    FACT_ORDER_ITEMS }o--|| DIM_PRODUCTS : "product_key"
+    FACT_ORDER_ITEMS }o--|| DIM_SELLERS : "seller_key"
+    FACT_ORDER_ITEMS }o--|| DIM_DATE : "order_date_key"
+Table Specifications
+Table	Type	Grain	Records	Purpose
+FACT_ORDER_ITEMS	Fact	One row per order item	1,013	Central fact table for all sales analysis
+DIM_CUSTOMERS	Dimension	One row per unique customer	500	Customer attributes and location
+DIM_PRODUCTS	Dimension	One row per product	300	Product category, weight, volume
+DIM_SELLERS	Dimension	One row per seller	150	Seller location and identification
+DIM_DATE	Dimension	One row per calendar date	1,096	Date hierarchy (2016–2018)
+Fact Table Measures
+Column	Type	Description
+price	NUMBER(10,2)	Product price
+freight_value	NUMBER(10,2)	Shipping cost
+total_item_value	NUMBER(10,2)	Price + freight
+delivery_days_actual	NUMBER	Actual delivery time in days
+delivery_days_estimated	NUMBER	Estimated delivery promise
+review_score	NUMBER	Customer satisfaction (1–5)
+Why Star Schema?
+Simplified queries — analysts join fact to dimensions without complex multi-hop joins
+Performance — denormalized dimensions reduce join depth
+Business-friendly — maps directly to how business users think about data
+Dashboard-ready — Power BI and other tools work optimally with star schemas
+Analytics Views
+Six pre-built analytical views provide immediate business value:
+
+View	Purpose	Key Metrics
+V_MONTHLY_REVENUE	Revenue trends over 19 months	Orders, revenue, GMV, avg item value
+V_CATEGORY_PERFORMANCE	Product category ranking	Revenue, review scores, delivery time
+V_SELLER_SCORECARD	Seller performance evaluation	Orders fulfilled, revenue, ratings
+V_CUSTOMER_CLV	Customer lifetime value	Lifetime spend, order frequency, tenure
+V_DELIVERY_PERFORMANCE	Delivery SLA tracking	Avg delivery days, late delivery %
+V_PAYMENT_ANALYSIS	Payment method breakdown	GMV by payment type, avg order value
+Business Insights
+Derived from actual query results on the loaded dataset:
+
+Revenue Summary
+Total Revenue: R$ 251,065 across 578 delivered orders
+Average Review Score: 4.37 / 5.0
+Average Delivery Time: 15.1 days
+Top Product Categories (by Revenue)
+Category	Revenue	Avg Review	Avg Delivery Days
+Baby	R$ 19,399	4.32	15.5
+Telephony	R$ 17,118	4.42	15.4
+Toys	R$ 15,839	4.60	15.5
+Pet Shop	R$ 15,421	4.49	15.7
+Computers & Accessories	R$ 15,117	4.05	14.9
+Payment Methods
+Method	Orders	Total GMV	Avg Value
+Credit Card	297	R$ 150,823	R$ 306.55
+Boleto	171	R$ 85,457	R$ 309.63
+Debit Card	65	R$ 36,120	R$ 311.38
+Voucher	45	R$ 20,175	R$ 280.21
+Key Findings
+Credit card dominates with 51% of all orders
+Consistent delivery performance (~15 days) across categories
+High customer satisfaction (4.37 avg) indicates healthy marketplace
+"Toys" category has the highest review scores (4.60) despite mid-range revenue
+Snowflake Features Used
+Feature	How It Was Used
+Virtual Warehouse	OLIST_WH (X-Small) for all compute
+Multi-Schema Architecture	4 schemas separating data lifecycle stages
+File Format	CSV_FORMAT for standardized parsing
+COPY INTO (via Snowsight)	Bulk data loading from CSV
+CREATE TABLE IF NOT EXISTS	Protects RAW data from accidental overwrites
+CREATE OR REPLACE (STAGING/CORE)	Enables idempotent pipeline reruns
+Time Travel	Used to recover data after accidental table recreation
+UNDROP TABLE	Restored tables from Time Travel history
+CTAS (CREATE TABLE AS SELECT)	Materializes transformations as physical tables
+Window Functions	ROW_NUMBER() for deduplication (primary payment)
+GENERATOR	Creates DIM_DATE calendar without external data
+Data Engineering Challenges
+Challenge	Solution
+9 related CSV files with no unified key	Designed Star Schema to consolidate relationships
+Portuguese category names	LEFT JOIN with translation table, COALESCE for fallback
+Accidental data wipe from CREATE OR REPLACE	Changed to IF NOT EXISTS; recovered via Time Travel + UNDROP
+Inconsistent text formatting (case, whitespace)	Applied INITCAP, UPPER, TRIM in STAGING
+NULL values across datasets	NULL_IF in file format + WHERE IS NOT NULL filters
+Multiple payments per order	Window function to identify primary payment method
+Customer deduplication	Grouped by customer_unique_id in DIM_CUSTOMERS
+Missing delivery dates (non-delivered orders)	Computed columns return NULL gracefully; analytics filter on delivered
+Cost Optimization
+Practice	Impact
+X-Small warehouse	Minimum credit consumption (1 credit/hour)
+Auto-Suspend = 60s	Warehouse stops within 1 minute of inactivity
+Auto-Resume	No manual intervention needed
+Initially Suspended	No cost until first query runs
+IF NOT EXISTS for RAW	Avoids unnecessary recreation and reloading
+CTAS over INSERT loops	Single-pass transformations; faster and cheaper
+Project Structure
+olist-snowflake-data-engineering/
+│
+├── README.md                    # This documentation
+│
+├── brazilian.sql                # Complete pipeline (Steps 0–6)
+│   ├── Step 0: Infrastructure   # Warehouse, DB, Schemas, File Format
+│   ├── Step 1: RAW Tables       # Table definitions (IF NOT EXISTS)
+│   ├── Step 2: Load Validation  # Row count verification
+│   ├── Step 3: STAGING Layer    # Cleaned + enriched tables
+│   ├── Step 4: CORE Layer       # Star Schema (Fact + Dimensions)
+│   ├── Step 5: ANALYTICS Layer  # Business views
+│   └── Step 6: Pipeline Verify  # Full pipeline row count check
+│
+├── powerbi/
+│   └── [ADD DASHBOARD FILES]
+│
+├── screenshots/
+│   └── [ADD DASHBOARD SCREENSHOTS]
+│
+└── architecture/
+    └── [ADD ARCHITECTURE DIAGRAM]
+How to Run This Project
+Prerequisites
+Snowflake account (any edition)
+ACCOUNTADMIN role (for initial setup)
+Olist dataset CSV files (Download from Kaggle)
+Setup Steps
+1. Open brazilian.sql in Snowflake Snowsight
+
+2. Run Step 0 — Creates warehouse, database, schemas, file format
+
+3. Run Step 1 — Creates RAW table structures
+
+4. Load Data via Snowsight UI:
+   - Navigate to OLIST_ECOMMERCE > RAW > each table
+   - Click "Load Data" button
+   - Upload corresponding CSV file
+   - Use CSV_FORMAT as the file format
+   - Repeat for all 9 tables
+
+5. Run Step 2 — Verify row counts match expected values
+
+6. Run Steps 3–6 — Builds STAGING, CORE, ANALYTICS, and verifies
+Important: Do NOT re-run Step 1 after data is loaded. The tables use IF NOT EXISTS to prevent this, but avoid it as a practice.
+
+Power BI Dashboard
+Connection
+Power BI connects to Snowflake via the native Snowflake connector using the ANALYTICS schema views.
+
+Dashboard Pages
+Page	Key Visuals
+Executive Overview	Total Revenue, Orders, Customers, Avg Review Score
+Sales Analytics	Revenue by Category, Monthly Trends, Top Sellers
+Customer Analytics	Geographic Distribution, CLV Analysis
+Delivery Analytics	Avg Delivery Time, Late Delivery %, SLA Tracking
+Payment Analytics	Payment Method Breakdown, Installment Analysis
+Executive Dashboard [ADD YOUR SCREENSHOT HERE]
+
+Sales Analytics [ADD YOUR SCREENSHOT HERE]
+
+Delivery Performance [ADD YOUR SCREENSHOT HERE]
+
+Key Learnings
+This project demonstrates practical understanding of:
+
+Data Warehouse Design — Multi-layer architecture with clear separation of concerns
+Dimensional Modeling — Star Schema with fact and dimension tables at defined grain
+SQL Proficiency — CTAs, window functions, aggregations, multi-table joins, COALESCE, date functions
+Snowflake Platform — Warehouse management, Time Travel, UNDROP, file formats, GENERATOR
+Data Quality — NULL handling, deduplication, text standardization, referential joins
+Pipeline Safety — Idempotent design with IF NOT EXISTS, OR REPLACE for downstream layers
+Cost Awareness — Right-sized warehouse, auto-suspend, efficient single-pass transforms
+Future Enhancements
+Enhancement	Description
+Snowflake Streams	Capture incremental changes in RAW tables
+Snowflake Tasks	Automate STAGING/CORE rebuilds on a schedule
+RBAC Implementation	Create DATA_ENGINEER and ANALYST roles with least-privilege access
+Data Quality Framework	Dedicated DQ checks (NULL rates, duplicates, referential integrity) as a separate step
+Snowpipe	Auto-ingest from cloud storage (S3/Azure Blob)
+Zero-Copy Cloning	Create dev/test environments without duplicating data
+dbt Integration	Replace raw SQL with dbt models for lineage and testing
+CI/CD Pipeline	Automate deployment with GitHub Actions
+Advanced Analytics	Customer segmentation (RFM), cohort analysis, churn prediction
+Real-time Dashboard	Auto-refresh Power BI with DirectQuery mode
+Interview Talking Points
+30-Second Pitch
+"I built an end-to-end data engineering project on Snowflake using the Brazilian Olist e-commerce dataset. I designed a 4-layer architecture — RAW, STAGING, CORE, and ANALYTICS — transforming 9 source CSV files into a Star Schema with pre-built analytical views. The pipeline is idempotent, cost-optimized, and produces business-ready insights on revenue, delivery performance, and customer satisfaction."
+
+1-Minute Technical Explanation
+"The project starts with 9 raw CSV files from the Olist marketplace. I loaded them into Snowflake's RAW schema as-is. The STAGING layer applies cleaning — standardizing text, computing delivery days, joining category translations. The CORE layer implements a Star Schema with FACT_ORDER_ITEMS at order-item grain, joined to four dimensions: customers, products, sellers, and a generated date dimension. Finally, the ANALYTICS layer has six pre-aggregated views covering monthly revenue, category performance, seller scorecards, customer lifetime value, delivery SLA tracking, and payment analysis. I used Time Travel to recover from an accidental data wipe, and redesigned the pipeline with IF NOT EXISTS to be safely re-runnable."
+
+Technical Questions You Can Answer
+Question	Key Points
+"Why did you choose a Star Schema?"	Optimized for analytical queries, reduces join complexity, maps to business thinking, works well with BI tools
+"How do you handle pipeline failures?"	IF NOT EXISTS protects RAW data; STAGING/CORE use OR REPLACE for idempotent reruns; Time Travel enables recovery
+"What's the grain of your fact table?"	One row per order item — allows analysis at product, seller, and order level
+"How do you handle data quality?"	NULL filtering, TRIM/INITCAP for consistency, COALESCE for missing translations, referential joins with LEFT JOIN
+"Why four separate schemas?"	Separation of concerns — RAW preserves source truth, STAGING handles cleaning, CORE models business logic, ANALYTICS serves consumers
+Project Highlights
+This portfolio project demonstrates a complete Snowflake data engineering workflow — from raw CSV ingestion through dimensional modeling to business analytics. It showcases practical SQL skills, warehouse design principles, Star Schema implementation, and pipeline safety practices that are directly applicable to production data engineering work.
+
+Built by Aayush Misra | Snowflake Data Engineering Portfolio Project
+
