@@ -6,6 +6,14 @@
 
 ---
 
+## 📸 Dashboard Screenshot
+
+![Sales Report Dashboard](https://github.com/AayushMisra-labkernal/brazilindolist/assets/1/dashboard-preview.png)
+
+*Visual representation of the Sales Report Dashboard with AWS and Snowflake integration*
+
+---
+
 ## 📊 Executive Summary
 
 This Sales Report Dashboard provides a comprehensive analysis of sales performance across multiple dimensions including regions, categories, time periods, and customer segments. The dashboard leverages AWS and Snowflake integration for real-time data processing and analytics.
